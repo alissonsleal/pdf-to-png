@@ -4,8 +4,9 @@ import styles from '../styles/Home.module.css';
 import { Document, Page } from 'react-pdf';
 
 export default function Home() {
+  const [isLoading, setIsLoading] = useState(false);
   const [numPages, setNumPages] = useState(null);
-  const [imageUrlArray, setImageUrlArray] = useState([]);
+  const [imageUrlArray, setImageUrlArray] = useState(null);
   const [selectedPDFFile, setSelectedPDFFile] = useState();
 
   const handleImage = useCallback(
@@ -13,32 +14,48 @@ export default function Home() {
       setImageUrlArray([]);
       const file = event.target.files[0];
 
-      !!file?.type?.length && file.type === 'application/pdf'
-        ? setSelectedPDFFile(file)
-        : !!file?.type?.length &&
-          setImageUrlArray((prev) => [prev, URL.createObjectURL(file)]);
+      if (!!file?.type?.length && file.type === 'application/pdf') {
+        setIsLoading(true);
+        setSelectedPDFFile(file);
+      } else if (!!file?.type?.length) {
+        setImageUrlArray([URL.createObjectURL(file).toString()]);
+      }
     },
-    [setSelectedPDFFile, setImageUrlArray, imageUrlArray]
+    [
+      setSelectedPDFFile,
+      setImageUrlArray,
+      imageUrlArray,
+      setIsLoading,
+      isLoading,
+    ]
   );
 
   const onLoadSuccess = useCallback(
     ({ numPages }: { numPages: number }) => {
       setNumPages(numPages);
+      setIsLoading(false);
     },
-    [setNumPages, numPages]
+    [setNumPages, numPages, setIsLoading]
   );
 
-  const onRenderSuccess = useCallback(() => {
-    Array.from(new Array(numPages), (el, index) => {
-      const importPDFCanvas: HTMLCanvasElement = document.querySelector(
-        `.import-pdf-page-${index + 1} canvas`
-      );
+  const onRenderSuccess = useCallback(
+    (pageIndex) => {
+      Array.from(new Array(numPages), (el, index) => {
+        const importPDFCanvas: HTMLCanvasElement = document.querySelector(
+          `.import-pdf-page-${index + 1} canvas`
+        );
 
-      importPDFCanvas.toBlob((blob) => {
-        setImageUrlArray((prev) => [...prev, URL.createObjectURL(blob)]);
+        pageIndex === index &&
+          importPDFCanvas.toBlob((blob) => {
+            setImageUrlArray((prev: string) => [
+              ...prev,
+              URL.createObjectURL(blob),
+            ]);
+          });
       });
-    });
-  }, [numPages, setImageUrlArray, imageUrlArray]);
+    },
+    [numPages, setImageUrlArray, imageUrlArray]
+  );
 
   return (
     <div className={styles.container}>
@@ -58,16 +75,21 @@ export default function Home() {
           onChange={handleImage}
         />
 
+        {isLoading && <div className={styles.loader} />}
+
         {selectedPDFFile && (
           <div style={{ display: 'none', width: '100vw' }}>
-            {/* <div style={{ width: '100vw' }}> */}
-            <Document file={selectedPDFFile} onLoadSuccess={onLoadSuccess}>
+            <Document
+              file={selectedPDFFile}
+              onLoadSuccess={onLoadSuccess}
+              loading={'wait'}
+            >
               {Array.from(new Array(numPages), (el, index) => (
                 <Page
                   key={`page_${index + 1}`}
                   pageNumber={index + 1}
                   className={`import-pdf-page-${index + 1}`}
-                  onRenderSuccess={onRenderSuccess}
+                  onRenderSuccess={() => onRenderSuccess(index)}
                   width={1024}
                 />
               ))}
@@ -75,8 +97,8 @@ export default function Home() {
           </div>
         )}
 
-        {!!imageUrlArray.length &&
-          imageUrlArray.map((image, index) => (
+        {!!imageUrlArray?.length &&
+          imageUrlArray.map((image: string, index: number) => (
             <div key={`page_${index + 1}`} className={styles.imageContainer}>
               <img
                 className={styles.image}

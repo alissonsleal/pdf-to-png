@@ -1,13 +1,15 @@
 import { useCallback, useState } from 'react';
 import Head from 'next/head';
 import styles from '../styles/Home.module.css';
-import { Document, Page } from 'react-pdf';
+import { Document, Page, pdfjs } from 'react-pdf';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [numPages, setNumPages] = useState(null);
   const [imageUrlArray, setImageUrlArray] = useState(null);
   const [selectedPDFFile, setSelectedPDFFile] = useState();
+
+  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
   const handleImage = useCallback(
     (event: any) => {

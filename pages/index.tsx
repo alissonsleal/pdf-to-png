@@ -83,7 +83,11 @@ export default function Home() {
 
         {selectedPDFFile && (
           <div className={styles.image}>
-            <Document file={selectedPDFFile} onLoadSuccess={onLoadSuccess}>
+            <Document
+              file={selectedPDFFile}
+              onLoadSuccess={onLoadSuccess}
+              error={<div>An error occurred!</div>}
+            >
               {Array.from(new Array(numPages), (el, index) => (
                 <>
                   <Page
@@ -96,6 +100,7 @@ export default function Home() {
                     width={1024}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    error={<div>An error occurred!</div>}
                   />
                   <a
                     className={styles.download}

@@ -33,7 +33,7 @@
   height: 64px;
   animation: spin 1s linear infinite;
   display: flex;
-  margin: 0 auto;
+  margin: 1rem auto 0 auto;
 }
 
 .imageContainer {

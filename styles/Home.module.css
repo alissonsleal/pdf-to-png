@@ -26,13 +26,14 @@
 }
 
 .loader {
-  margin-top: 2rem;
   border: 8px solid #f3f3f3;
   border-top: 8px solid #ff4444;
   border-radius: 50%;
   width: 64px;
   height: 64px;
   animation: spin 1s linear infinite;
+  display: flex;
+  margin: 0 auto;
 }
 
 .imageContainer {
@@ -44,8 +45,18 @@
 .image {
   margin: 2rem 0;
   border-radius: 2rem;
-  width: 50vw;
+  width: 90vw;
   max-width: 590px;
+}
+
+.image canvas {
+  width: 100% !important;
+  height: auto !important;
+  display: flex !important;
+}
+
+.none {
+  display: none !important;
 }
 
 .download {
@@ -54,6 +65,10 @@
   border-radius: 0.5rem;
   color: #fafafa;
   cursor: pointer;
+  width: 100%;
+  display: flex;
+  text-align: center;
+  justify-content: center;
 }
 
 .download:hover {

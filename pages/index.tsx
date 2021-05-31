@@ -7,6 +7,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [numPages, setNumPages] = useState(null);
   const [imageUrlArray, setImageUrlArray] = useState(null);
+  const [fileType, setFileType] = useState(null);
   const [selectedPDFFile, setSelectedPDFFile] = useState();
 
   pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
@@ -20,6 +21,7 @@ export default function Home() {
         setIsLoading(true);
         setSelectedPDFFile(file);
       } else if (!!file?.type?.length) {
+        setFileType('image');
         setImageUrlArray([URL.createObjectURL(file).toString()]);
       }
     },
@@ -80,26 +82,36 @@ export default function Home() {
         {isLoading && <div className={styles.loader} />}
 
         {selectedPDFFile && (
-          <div style={{ display: 'none', width: '100vw' }}>
-            <Document
-              file={selectedPDFFile}
-              onLoadSuccess={onLoadSuccess}
-              loading={'wait'}
-            >
+          <div className={styles.image}>
+            <Document file={selectedPDFFile} onLoadSuccess={onLoadSuccess}>
               {Array.from(new Array(numPages), (el, index) => (
-                <Page
-                  key={`page_${index + 1}`}
-                  pageNumber={index + 1}
-                  className={`import-pdf-page-${index + 1}`}
-                  onRenderSuccess={() => onRenderSuccess(index)}
-                  width={1024}
-                />
+                <>
+                  <Page
+                    key={`page_${index + 1}`}
+                    pageNumber={index + 1}
+                    className={`import-pdf-page-${index + 1} ${styles.image} ${
+                      fileType === 'image' && styles.none
+                    }`}
+                    onRenderSuccess={() => onRenderSuccess(index)}
+                    width={1024}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                  />
+                  <a
+                    className={styles.download}
+                    href={imageUrlArray[index]}
+                    download
+                  >
+                    download file
+                  </a>
+                </>
               ))}
             </Document>
           </div>
         )}
 
         {!!imageUrlArray?.length &&
+          fileType === 'image' &&
           imageUrlArray.map((image: string, index: number) => (
             <div key={`page_${index + 1}`} className={styles.imageContainer}>
               <img className={styles.image} src={image} />

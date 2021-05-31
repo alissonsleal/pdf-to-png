@@ -2,7 +2,7 @@
     <a href="https://github.com/Alissonsleal/pdf-to-png/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/Alissonsleal/pdf-to-png?color=sucess&style=flat-square"></a>
     <a href="https://github.com/Alissonsleal/pdf-to-png/network"><img alt="GitHub forks" src="https://img.shields.io/github/forks/Alissonsleal/pdf-to-png?color=sucess&style=flat-square"></a>
     <a href="https://github.com/Alissonsleal/pdf-to-png/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Alissonsleal/pdf-to-png?color=sucess&style=flat-square"></a>
-    <a href="https://github.com/Alissonsleal/pdf-to-png/blob/master/LICENSE"><img alt="GitHub license" src="https://img.shields.io/github/license/Alissonsleal/pdf-to-png?color=sucess&style=flat-square"></a>
+    <a href="https://github.com/Alissonsleal/pdf-to-png/blob/main/LICENSE"><img alt="GitHub license" src="https://img.shields.io/github/license/Alissonsleal/pdf-to-png?color=sucess&style=flat-square"></a>
     <a href="https://github.com/Alissonsleal/"><img alt="Alisson Leal GitHub Profile" src="https://img.shields.io/badge/made%20by-Alisson%20Leal-sucess?style=flat-square&logo=appveyor"></a>
 </p>
 

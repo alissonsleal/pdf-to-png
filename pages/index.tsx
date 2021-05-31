@@ -102,13 +102,15 @@ export default function Home() {
                     renderAnnotationLayer={false}
                     error={<div>An error occurred!</div>}
                   />
-                  <a
-                    className={styles.download}
-                    href={imageUrlArray[index]}
-                    download
-                  >
-                    download file
-                  </a>
+                  {imageUrlArray[index] && (
+                    <a
+                      className={styles.download}
+                      href={imageUrlArray[index]}
+                      download
+                    >
+                      download file
+                    </a>
+                  )}
                 </>
               ))}
             </Document>

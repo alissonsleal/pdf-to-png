@@ -102,11 +102,7 @@ export default function Home() {
         {!!imageUrlArray?.length &&
           imageUrlArray.map((image: string, index: number) => (
             <div key={`page_${index + 1}`} className={styles.imageContainer}>
-              <img
-                className={styles.image}
-                src={image}
-                style={{ width: '50vw' }}
-              />
+              <img className={styles.image} src={image} />
               <a className={styles.download} href={image} download>
                 download file
               </a>

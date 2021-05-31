@@ -44,6 +44,8 @@
 .image {
   margin: 2rem 0;
   border-radius: 2rem;
+  width: 50vw;
+  max-width: 590px;
 }
 
 .download {

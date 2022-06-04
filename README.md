@@ -10,7 +10,8 @@
 
 This is a simple **proof of concept** to convert a PDF file into PNG.
 
-Check out the live version here: [PDF-to-PNG](https://pdf2png.ga)
+Check out the live version here: [PDF-to-PNG](https://pdf-to-png.vercel.app)
+
 
 ## Built With:
 

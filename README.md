@@ -8,36 +8,44 @@
 
 # PDF to PNG
 
-This is a simple **proof of concept** to convert a PDF file into PNG.
+A small **proof of concept** that converts a PDF (or image) to PNG files entirely in the browser — no upload, no server.
 
-Check out the live version here: [PDF-to-PNG](https://pdf-to-png.vercel.app)
+Live demo: [pdf-to-png.vercel.app](https://pdf-to-png.vercel.app)
 
+## Built with
 
-## Built With:
+- [Next.js](https://nextjs.org) 16 (App Router)
+- [React](https://react.dev) 19
+- [TypeScript](https://www.typescriptlang.org) 6
+- [react-pdf](https://www.npmjs.com/package/react-pdf) 10 (powered by pdfjs)
+- [Tailwind CSS](https://tailwindcss.com) 4
+- [bun](https://bun.sh) (package manager & runtime)
+- Deployed to [Vercel](https://vercel.com)
 
-- [x] [Next.JS](https://nextjs.org)
-- [x] [Typescript](https://www.typescriptlang.org)
-- [x] [React-pdf](https://www.npmjs.com/package/react-pdf)
-- [x] [Deployed to Vercel](https://vercel.com)
+## Run locally
 
-## Run this locally
+You'll need [bun](https://bun.sh) installed.
 
-To run this project locally, you'll need Node.js installed.
+```sh
+bun install
+bun dev
+```
 
-Clone this repo using `git clone https://github.com/Alissonsleal/pdf-to-png`
+Open [http://localhost:3000](http://localhost:3000).
 
-Go into your project directory `cd pdf-to-png`
+## Scripts
 
-Install dependencies preferably with `yarn` but you can also use `npm install`
+| Script           | Description                       |
+| ---------------- | --------------------------------- |
+| `bun dev`        | Start the dev server              |
+| `bun run build`  | Production build                  |
+| `bun start`      | Run the production build          |
+| `bun run typecheck` | Type-check the project with `tsc` |
 
-Run your Next.JS App with `yarn dev` or `npm run dev`
+## Author
 
-Go to `localhost:3000`
+- Twitter — [@alissonsleal](https://twitter.com/alissonsleal) (DMs open)
+- Discord — `Alisson#0629`
+- StackOverflow — [Alisson Leal](https://stackoverflow.com/users/14122260/alisson-leal)
 
-## Author Info
-
-- Twitter - [@alissonsleal](https://twitter.com/alissonsleal) <i>dms are open</i>
-- Discord - [Alisson#0629](https://discord.com/)
-- StackOverflow - [Alisson Leal](https://stackoverflow.com/users/14122260/alisson-leal)
-
-[Go to the top 🚀](#pdf-to-png)
+[Go to the top](#pdf-to-png)

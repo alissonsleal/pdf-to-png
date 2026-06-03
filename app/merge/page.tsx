@@ -1,39 +1,69 @@
-import { PdfConverterLoader } from '../components/pdf-converter-loader';
-import { SiteHeader } from '../components/site-header';
+import type { Metadata } from 'next';
+import { PdfMergerLoader } from '../../components/pdf-merger-loader';
+import { SiteHeader } from '../../components/site-header';
 
-export default function Page() {
+export const metadata: Metadata = {
+  title: 'Merge PDFs — Free Online Combiner (No Upload)',
+  description:
+    'Combine PDF files in your browser. Reorder pages with drag and drop, merge unlimited PDFs, and download the result. 100% client-side, no upload, no signup.',
+  keywords: [
+    'merge pdf',
+    'combine pdf',
+    'pdf merger',
+    'join pdf',
+    'client side pdf',
+    'no upload',
+    'free pdf merge',
+  ],
+  openGraph: {
+    title: 'Merge PDFs — Free Online Combiner',
+    description:
+      'Combine PDF files in your browser. Drag to reorder, merge unlimited PDFs, and download. No upload, no signup.',
+    type: 'website',
+    url: '/merge',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Merge PDFs — Free Online Combiner',
+    description:
+      'Combine PDF files in your browser. Drag to reorder, merge unlimited PDFs, and download. No upload, no signup.',
+  },
+};
+
+export default function MergePage() {
   return (
     <>
-      <SiteHeader current="convert" />
+      <SiteHeader current="merge" />
 
       <main className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <section className="pt-6 pb-12 text-center sm:pt-10 sm:pb-16">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            PDF to PNG, in your browser.
+            Merge PDFs, in your browser.
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base opacity-70 sm:text-lg">
-            Drop a PDF and get a PNG for every page. Nothing is uploaded —
-            conversion happens entirely on your device.
+            Combine as many PDFs as you need. Drag to reorder them, then
+            download a single merged file. Nothing is uploaded — merging
+            happens entirely on your device.
           </p>
         </section>
 
-        <PdfConverterLoader />
+        <PdfMergerLoader />
 
         <section className="mt-24 grid gap-8 sm:grid-cols-3">
           <Step
             number="1"
-            title="Drop your PDF"
-            body="Pick a file from your device, or drag and drop it onto the page."
+            title="Add your PDFs"
+            body="Pick the files from your device, or drag and drop them onto the page. Add as many as you need."
           />
           <Step
             number="2"
-            title="We render the pages"
-            body="Each page is rasterised to a high-resolution PNG in your browser."
+            title="Reorder"
+            body="Drag the files to set the order they should appear in the merged PDF. Use the keyboard arrows if you prefer."
           />
           <Step
             number="3"
-            title="Download"
-            body="Save pages one by one, or grab the whole set as a zip."
+            title="Merge and download"
+            body="Click merge. The combined file is produced in your browser and offered as a download — no server involved."
           />
         </section>
 
@@ -43,20 +73,20 @@ export default function Page() {
           </h2>
           <ul className="mt-6 grid gap-4 sm:grid-cols-2">
             <Bullet title="Private by default">
-              Your file never leaves your device. There&apos;s no server to send
-              it to.
+              Your files never leave your device. There&apos;s no server to
+              send them to.
             </Bullet>
             <Bullet title="No signup, no watermark">
               No accounts, no email, no paid tiers, no logo stamped on your
               output.
             </Bullet>
-            <Bullet title="Works offline">
-              After the first load, you can convert without an internet
-              connection.
+            <Bullet title="Unlimited files">
+              Add as many PDFs as your device can handle. The only limit is
+              your available memory.
             </Bullet>
-            <Bullet title="Open source">
-              The whole thing is a few hundred lines of code on GitHub. Audit it
-              yourself.
+            <Bullet title="Original quality">
+              Pages are copied directly — text, images, and forms are
+              preserved exactly.
             </Bullet>
           </ul>
         </section>
@@ -66,33 +96,31 @@ export default function Page() {
             FAQ
           </h2>
           <div className="mt-6 divide-y divide-black/10 dark:divide-white/10">
-            <Faq q="Is my PDF uploaded anywhere?">
-              No. The conversion runs in your browser using{' '}
+            <Faq q="Are my PDFs uploaded anywhere?">
+              No. The merge runs in your browser using{' '}
               <a
-                href="https://mozilla.github.io/pdf.js/"
+                href="https://pdf-lib.js.org/"
                 className="underline"
                 target="_blank"
                 rel="noreferrer"
               >
-                pdf.js
+                pdf-lib
               </a>
-              . The file stays on your device.
+              . The files stay on your device.
             </Faq>
-            <Faq q="Is there a file size limit?">
-              The only limit is your device&apos;s memory. Big PDFs (hundreds of
-              pages, or pages with many images) will be slower.
+            <Faq q="Is there a limit on how many PDFs I can merge?">
+              No hard limit. The only constraint is your device&apos;s memory
+              — the merger keeps each file in memory while building the
+              result.
             </Faq>
-            <Faq q="What resolution do the PNGs come out at?">
-              Pages are rendered at a fixed width of 1024 pixels, which is a
-              good balance between sharpness and file size.
+            <Faq q="Is the order of pages preserved exactly?">
+              Yes. The pages of each PDF are copied in their original order.
+              Reordering only changes the order of the files themselves.
             </Faq>
-            <Faq q="Can I convert images too?">
-              Yes. If you upload a regular image file, you can re-download it
-              directly without any conversion.
-            </Faq>
-            <Faq q="Why is it free?">
-              It&apos;s a small open-source project. There are no servers to
-              pay for because all the work happens on your device.
+            <Faq q="What about encrypted PDFs?">
+              The merger tries to read encrypted PDFs in compatibility mode.
+              Files with a real password will be skipped with an error
+              message.
             </Faq>
           </div>
         </section>

@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 
-const PdfConverter = dynamic(
-  () => import('./PdfConverter').then((m) => m.PdfConverter),
+const PdfMerger = dynamic(
+  () => import('./pdf-merger').then((m) => m.PdfMerger),
   {
     ssr: false,
     loading: () => (
@@ -18,6 +18,6 @@ const PdfConverter = dynamic(
   },
 );
 
-export function PdfConverterLoader() {
-  return <PdfConverter />;
+export function PdfMergerLoader() {
+  return <PdfMerger />;
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-type NavKey = 'convert' | 'merge';
+type NavKey = 'convert' | 'merge' | 'compress';
 
 type Props = {
   current?: NavKey;
@@ -9,6 +9,7 @@ type Props = {
 const navLinks: { key: NavKey; href: string; label: string }[] = [
   { key: 'convert', href: '/', label: 'Convert' },
   { key: 'merge', href: '/merge', label: 'Merge' },
+  { key: 'compress', href: '/compress', label: 'Compress' },
 ];
 
 export function SiteHeader({ current = 'convert' }: Props) {

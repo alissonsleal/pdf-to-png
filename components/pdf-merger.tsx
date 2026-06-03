@@ -200,6 +200,7 @@ export function PdfMerger() {
         pageCount: totalPages,
       });
       setStatus('done');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       setError('Failed to merge these PDFs. Please try again.');
       setStatus('idle');

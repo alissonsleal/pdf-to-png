@@ -16,31 +16,31 @@ export function MergeResult({
   const url = URL.createObjectURL(blob);
 
   return (
-    <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.02] sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="font-medium">Your merged PDF is ready</p>
-          <p className="text-sm opacity-60">
+    <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.02] sm:p-8">
+      <div className="flex flex-col items-center gap-5 text-center sm:gap-6">
+        <div>
+          <p className="text-xl font-semibold sm:text-2xl">
+            Your merged PDF is ready
+          </p>
+          <p className="mt-1 text-sm opacity-60">
             {pageCount} {pageCount === 1 ? 'page' : 'pages'} in total
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={url}
-            download={fileName}
-            className="flex items-center gap-2 rounded-lg bg-[#f44] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#f34]"
-          >
-            <DownloadIcon />
-            Download merged PDF
-          </a>
-          <button
-            type="button"
-            onClick={onStartOver}
-            className="rounded-lg border border-black/15 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-black/[0.04] dark:border-white/15 dark:hover:bg-white/[0.06]"
-          >
-            Start over
-          </button>
-        </div>
+        <a
+          href={url}
+          download={fileName}
+          className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#f44] px-6 py-4 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#f34] sm:w-auto sm:px-10 sm:text-lg"
+        >
+          <DownloadIcon className="h-5 w-5" />
+          Download merged PDF
+        </a>
+        <button
+          type="button"
+          onClick={onStartOver}
+          className="text-sm font-medium opacity-70 underline-offset-4 transition-opacity hover:opacity-100 hover:underline"
+        >
+          Start over
+        </button>
       </div>
     </div>
   );

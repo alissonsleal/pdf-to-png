@@ -71,6 +71,11 @@ export function CompressResult({
             Text and vector content were left untouched. Only the embedded
             images were re-encoded as JPEG.
           </p>
+        ) : method === 'hybrid' ? (
+          <p className="max-w-md text-sm opacity-70">
+            Text pages were kept as-is. Pages that were pure scans were
+            re-rendered at a smaller size.
+          </p>
         ) : null}
 
         <a
@@ -96,6 +101,7 @@ export function CompressResult({
 const METHOD_LABEL: Record<CompressMethod, string> = {
   'lossless': 'Lossless optimization',
   'images-only': 'Images re-encoded, text preserved',
+  'hybrid': 'Images downsampled, scan pages re-rendered',
   'rasterized': 'Pages re-rendered as images',
 };
 
@@ -116,7 +122,7 @@ function MethodIcon({ method }: { method: CompressMethod }) {
       </svg>
     );
   }
-  if (method === 'images-only') {
+  if (method === 'images-only' || method === 'hybrid') {
     return (
       <svg
         viewBox="0 0 24 24"

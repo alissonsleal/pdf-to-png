@@ -11,13 +11,16 @@ type LevelConfig = {
 };
 
 const LEVEL_CONFIG: Record<CompressionLevel, LevelConfig> = {
-  smart: { scale: 0, jpegQuality: 0, imageQuality: 75 },
+  smart: { scale: 0, jpegQuality: 0, imageQuality: 50 },
   light: { scale: 2.0, jpegQuality: 0.85, imageQuality: 85 },
   medium: { scale: 1.5, jpegQuality: 0.7, imageQuality: 70 },
   heavy: { scale: 1.0, jpegQuality: 0.5, imageQuality: 55 },
 };
 
-export type CompressMethod = 'lossless' | 'images-only' | 'rasterized';
+const SMART_TARGET_DPI = 150;
+const SMART_DOWNSAMPLE_THRESHOLD_DPI = 170;
+
+export type CompressMethod = 'lossless' | 'images-only' | 'hybrid' | 'rasterized';
 
 export type CompressResult = {
   blob: Blob;
@@ -82,10 +85,10 @@ async function tryLosslessOptimize(
 type MupdfImage = InstanceType<typeof mupdf.Image>;
 type MupdfPixmap = InstanceType<typeof mupdf.Pixmap>;
 type MupdfPDFObject = InstanceType<typeof mupdf.PDFObject>;
+type MupdfPDFPage = InstanceType<typeof mupdf.PDFPage>;
+type MupdfPDFDocument = InstanceType<typeof mupdf.PDFDocument>;
 
-function stripMetadataAndStructure(
-  pdfDoc: InstanceType<typeof mupdf.PDFDocument>,
-): void {
+function stripMetadataAndStructure(pdfDoc: MupdfPDFDocument): void {
   const catalog = pdfDoc.getTrailer().get('Root');
   if (!catalog) return;
   if (catalog.get('Metadata')) catalog.delete('Metadata');
@@ -98,25 +101,94 @@ function stripMetadataAndStructure(
   }
 }
 
-function collectImageXObjects(
-  pdfDoc: InstanceType<typeof mupdf.PDFDocument>,
-): MupdfPDFObject[] {
-  const images: MupdfPDFObject[] = [];
+type PageBounds = [number, number, number, number];
+
+function getPageBounds(page: MupdfPDFPage): PageBounds | null {
+  try {
+    const bounds = page.getBounds();
+    return [bounds[0], bounds[1], bounds[2], bounds[3]];
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+function collectImageXObjectsWithPages(
+  pdfDoc: MupdfPDFDocument,
+): Array<{ xobject: MupdfPDFObject; pageBounds: PageBounds | null }> {
+  const result: Array<{ xobject: MupdfPDFObject; pageBounds: PageBounds | null }> = [];
   const pageCount = pdfDoc.countPages();
   for (let i = 0; i < pageCount; i++) {
     const page = pdfDoc.loadPage(i);
+    const pageBounds = getPageBounds(page);
     const resources = page.getObject().get('Resources');
-    if (!resources || !resources.isDictionary()) continue;
-    const xobjects = resources.get('XObject');
-    if (!xobjects || !xobjects.isDictionary()) continue;
-    xobjects.forEach((raw) => {
-      if (!raw.isStream()) return;
-      const subtype = raw.get('Subtype');
-      if (!subtype || subtype.asName() !== 'Image') return;
-      images.push(raw);
-    });
+    if (resources && resources.isDictionary()) {
+      const xobjects = resources.get('XObject');
+      if (xobjects && xobjects.isDictionary()) {
+        xobjects.forEach((raw) => {
+          if (!raw.isStream()) return;
+          const subtype = raw.get('Subtype');
+          if (!subtype || subtype.asName() !== 'Image') return;
+          result.push({ xobject: raw, pageBounds });
+        });
+      }
+    }
   }
-  return images;
+  return result;
+}
+
+type DownsampleDecision = {
+  width: number;
+  height: number;
+  downsample: boolean;
+  effectiveDpi: number;
+};
+
+function computeDownsample(
+  srcW: number,
+  srcH: number,
+  pageBounds: PageBounds,
+): DownsampleDecision {
+  const pageW = pageBounds[2] - pageBounds[0];
+  const pageH = pageBounds[3] - pageBounds[1];
+  const dpiX = (srcW * 72) / pageW;
+  const dpiY = (srcH * 72) / pageH;
+  const effectiveDpi = Math.max(dpiX, dpiY);
+  if (effectiveDpi <= SMART_DOWNSAMPLE_THRESHOLD_DPI) {
+    return { width: srcW, height: srcH, downsample: false, effectiveDpi };
+  }
+  const ratio = SMART_TARGET_DPI / effectiveDpi;
+  return {
+    width: Math.max(1, Math.round(srcW * ratio)),
+    height: Math.max(1, Math.round(srcH * ratio)),
+    downsample: true,
+    effectiveDpi,
+  };
+}
+
+async function downsamplePixmapToJpeg(
+  srcPix: MupdfPixmap,
+  dstW: number,
+  dstH: number,
+  quality: number,
+): Promise<Uint8Array> {
+  const srcW = srcPix.getWidth();
+  const srcH = srcPix.getHeight();
+  const warped = srcPix.warp(
+    [
+      [0, 0],
+      [srcW, 0],
+      [srcW, srcH],
+      [0, srcH],
+    ],
+    dstW,
+    dstH,
+  );
+  try {
+    return warped.asJPEG(quality);
+  } finally {
+    warped.destroy();
+  }
 }
 
 function flattenAlphaOntoWhite(
@@ -170,12 +242,12 @@ async function tryImagesOnlyOptimize(
     }
     const pageCount = doc.countPages();
 
-    const images = collectImageXObjects(pdfDoc);
-    onProgress?.(0, images.length);
+    const imageInfos = collectImageXObjectsWithPages(pdfDoc);
+    onProgress?.(0, imageInfos.length);
 
     let reencoded = 0;
-    for (let i = 0; i < images.length; i++) {
-      const xobject = images[i];
+    for (let i = 0; i < imageInfos.length; i++) {
+      const { xobject, pageBounds } = imageInfos[i];
       let image: MupdfImage | null = null;
       let srcPix: MupdfPixmap | null = null;
       let opaquePix: MupdfPixmap | null = null;
@@ -183,19 +255,50 @@ async function tryImagesOnlyOptimize(
         const lengthObj = xobject.get('Length');
         const originalSize = lengthObj ? lengthObj.asNumber() : 0;
         if (originalSize <= 256) {
-          onProgress?.(i + 1, images.length);
+          onProgress?.(i + 1, imageInfos.length);
           continue;
         }
         image = pdfDoc.loadImage(xobject);
         srcPix = image.toPixmap();
         opaquePix =
           srcPix.getAlpha() > 0 ? flattenAlphaOntoWhite(srcPix) : srcPix;
-        const jpegBytes = opaquePix.asJPEG(quality);
+
+        const n = srcPix.getNumberOfComponents();
+        const isGray = n === 1;
+        const srcW = srcPix.getWidth();
+        const srcH = srcPix.getHeight();
+
+        let decision: DownsampleDecision = {
+          width: srcW,
+          height: srcH,
+          downsample: false,
+          effectiveDpi: 0,
+        };
+        if (pageBounds) {
+          decision = computeDownsample(srcW, srcH, pageBounds);
+        }
+
+        let jpegBytes: Uint8Array;
+        if (decision.downsample) {
+          jpegBytes = await downsamplePixmapToJpeg(
+            opaquePix,
+            decision.width,
+            decision.height,
+            quality,
+          );
+        } else {
+          jpegBytes = opaquePix.asJPEG(quality);
+        }
+
         if (jpegBytes.byteLength < originalSize) {
           xobject.put('Filter', 'DCTDecode');
-          xobject.delete('DecodeParms');
+          xobject.put('DecodeParms', { Quality: quality });
           xobject.put('BitsPerComponent', 8);
-          xobject.put('ColorSpace', 'DeviceRGB');
+          xobject.put('ColorSpace', isGray ? 'DeviceGray' : 'DeviceRGB');
+          if (decision.downsample) {
+            xobject.put('Width', decision.width);
+            xobject.put('Height', decision.height);
+          }
           if (xobject.get('SMask')) xobject.delete('SMask');
           xobject.writeRawStream(jpegBytes);
           reencoded++;
@@ -207,7 +310,7 @@ async function tryImagesOnlyOptimize(
         if (srcPix) srcPix.destroy();
         if (image) image.destroy();
       }
-      onProgress?.(i + 1, images.length);
+      onProgress?.(i + 1, imageInfos.length);
     }
 
     if (reencoded === 0) {
@@ -303,6 +406,134 @@ async function rasterizePdf(
   };
 }
 
+async function pageHasImageDraw(page: pdfjs.PDFPageProxy): Promise<boolean> {
+  try {
+    const OPS = pdfjs.OPS;
+    const opList = await page.getOperatorList();
+    for (let j = 0; j < opList.fnArray.length; j++) {
+      const op = opList.fnArray[j];
+      if (
+        op === OPS.paintImageXObject ||
+        op === OPS.paintImageXObjectRepeat ||
+        op === OPS.paintInlineImageXObject ||
+        op === OPS.paintInlineImageXObjectGroup
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+async function pageHasText(page: pdfjs.PDFPageProxy): Promise<boolean> {
+  try {
+    const text = await page.getTextContent();
+    return text.items.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function compressHybridSmart(
+  sourceBytes: Uint8Array,
+  jpegQuality: number,
+  targetDpi: number,
+  onProgress?: (p: CompressProgress) => void,
+): Promise<{ blob: Blob; pageCount: number } | null> {
+  let sourcePdf: pdfjs.PDFDocumentProxy | null = null;
+  let sourcePdfLib: PDFDocument | null = null;
+  try {
+    ensurePdfjsWorker();
+    const buffer = sourceBytes.buffer.slice(
+      sourceBytes.byteOffset,
+      sourceBytes.byteOffset + sourceBytes.byteLength,
+    ) as ArrayBuffer;
+    const loadingTask = pdfjs.getDocument({ data: buffer });
+    sourcePdf = await loadingTask.promise;
+    const pageCount = sourcePdf.numPages;
+
+    sourcePdfLib = await PDFDocument.load(sourceBytes);
+
+    const output = await PDFDocument.create();
+    const scale = targetDpi / 72;
+    let imageOnlyPages = 0;
+
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await sourcePdf.getPage(i);
+      const hasText = await pageHasText(page);
+      const isImageOnly = !hasText && (await pageHasImageDraw(page));
+
+      if (isImageOnly) {
+        imageOnlyPages++;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvas, viewport }).promise;
+          const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(
+              (b) =>
+                b ? resolve(b) : reject(new Error('Failed to encode page.')),
+              'image/jpeg',
+              jpegQuality,
+            );
+          });
+          const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+          const jpg = await output.embedJpg(jpegBytes);
+          const newPage = output.addPage([baseViewport.width, baseViewport.height]);
+          newPage.drawImage(jpg, {
+            x: 0,
+            y: 0,
+            width: baseViewport.width,
+            height: baseViewport.height,
+          });
+          canvas.width = 0;
+          canvas.height = 0;
+        } else {
+          const [copied] = await output.copyPages(sourcePdfLib, [i - 1]);
+          output.addPage(copied);
+        }
+      } else {
+        const [copied] = await output.copyPages(sourcePdfLib, [i - 1]);
+        output.addPage(copied);
+      }
+
+      page.cleanup();
+      onProgress?.({ phase: 'rasterize', done: i, total: pageCount });
+    }
+
+    if (imageOnlyPages === 0) {
+      return null;
+    }
+
+    const saved = await output.save();
+    const copy = new Uint8Array(saved.byteLength);
+    copy.set(saved);
+    return {
+      blob: new Blob([copy as BlobPart], { type: 'application/pdf' }),
+      pageCount,
+    };
+  } catch {
+    return null;
+  } finally {
+    if (sourcePdf) {
+      try {
+        sourcePdf.destroy();
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
 export async function compressPdf(
   file: File,
   level: CompressionLevel,
@@ -313,7 +544,9 @@ export async function compressPdf(
 
   onProgress?.({ phase: 'optimizing' });
   const lossless = await tryLosslessOptimize(file);
-  if (lossless && lossless.blob.size < originalSize) {
+  const losslessHelped =
+    lossless !== null && lossless.blob.size <= originalSize * 0.95;
+  if (losslessHelped) {
     return {
       blob: lossless.blob,
       originalSize,
@@ -331,13 +564,59 @@ export async function compressPdf(
       config.imageQuality,
       (done, total) => onProgress?.({ phase: 'images', done, total }),
     );
-    if (imagesOnly && imagesOnly.blob.size < originalSize) {
+
+    type SmartResult = {
+      blob: Blob;
+      compressedSize: number;
+      pageCount: number;
+      method: CompressMethod;
+    };
+    const imagesOnlyResult: SmartResult | null =
+      imagesOnly && imagesOnly.blob.size < originalSize
+        ? {
+            blob: imagesOnly.blob,
+            compressedSize: imagesOnly.blob.size,
+            pageCount: imagesOnly.pageCount,
+            method: 'images-only',
+          }
+        : null;
+
+    let bestResult: SmartResult | null = imagesOnlyResult;
+    if (
+      !imagesOnlyResult ||
+      imagesOnlyResult.compressedSize > originalSize * 0.7
+    ) {
+      onProgress?.({ phase: 'rasterize', done: 0, total: 0 });
+      const sourceBytes = new Uint8Array(await file.arrayBuffer());
+      const hybrid = await compressHybridSmart(
+        sourceBytes,
+        config.imageQuality / 100,
+        SMART_TARGET_DPI,
+        (p) => onProgress?.(p),
+      );
+      if (hybrid && hybrid.blob.size < originalSize) {
+        const hybridResult: SmartResult = {
+          blob: hybrid.blob,
+          compressedSize: hybrid.blob.size,
+          pageCount: hybrid.pageCount,
+          method: 'hybrid',
+        };
+        if (
+          !bestResult ||
+          hybridResult.compressedSize < bestResult.compressedSize
+        ) {
+          bestResult = hybridResult;
+        }
+      }
+    }
+
+    if (bestResult) {
       return {
-        blob: imagesOnly.blob,
+        blob: bestResult.blob,
         originalSize,
-        compressedSize: imagesOnly.blob.size,
-        pageCount: imagesOnly.pageCount,
-        method: 'images-only',
+        compressedSize: bestResult.compressedSize,
+        pageCount: bestResult.pageCount,
+        method: bestResult.method,
         level,
       };
     }

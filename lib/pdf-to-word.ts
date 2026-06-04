@@ -7,7 +7,11 @@ import {
   ImageRun,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from 'docx';
 
 type MupdfImage = InstanceType<typeof mupdf.Image>;
@@ -64,6 +68,7 @@ type PageData = {
   bodyStartY: number;
   bodyXLeft: number;
   bodyXRight: number;
+  tableRegions: TableRegion[];
 };
 
 type CommonHeader = {
@@ -71,6 +76,36 @@ type CommonHeader = {
   format: 'png' | 'jpg';
   width: number;
   height: number;
+};
+
+type PageLineRef = {
+  blockIdx: number;
+  lineIdx: number;
+  line: RawLine;
+};
+
+type TableRegion = {
+  bbox: BBox;
+  columnXs: number[];
+  rows: PageLineRef[][];
+};
+
+type ResolvedTableCell = {
+  bbox: BBox;
+  lines: ResolvedLine[];
+  alignment: 'left' | 'center' | 'right';
+};
+
+type ResolvedTableRow = {
+  bbox: BBox;
+  cells: ResolvedTableCell[];
+};
+
+type ResolvedTable = {
+  bbox: BBox;
+  columnXs: number[];
+  columnWidths: number[];
+  rows: ResolvedTableRow[];
 };
 
 type ResolvedLine = {
@@ -275,6 +310,7 @@ function extractPageData(page: MupdfPage, pageIndex: number): PageData {
     bodyStartY: 0,
     bodyXLeft,
     bodyXRight,
+    tableRegions: [],
   };
 }
 
@@ -397,6 +433,153 @@ function rasterizeHeaderRegion(
     width: pageWidth,
     height: region.h,
   };
+}
+
+function detectTableRegions(blocks: RawBlock[]): TableRegion[] {
+  const allLines: PageLineRef[] = [];
+  for (let bi = 0; bi < blocks.length; bi++) {
+    const block = blocks[bi];
+    for (let li = 0; li < block.lines.length; li++) {
+      allLines.push({ blockIdx: bi, lineIdx: li, line: block.lines[li] });
+    }
+  }
+  if (allLines.length === 0) return [];
+
+  allLines.sort((a, b) => {
+    const ya = a.line.bbox.y;
+    const yb = b.line.bbox.y;
+    if (Math.abs(ya - yb) > 2) return ya - yb;
+    return a.line.bbox.x - b.line.bbox.x;
+  });
+
+  const ROW_BAND_SPACING = 10;
+  const yBands: PageLineRef[][] = [];
+  for (const pl of allLines) {
+    const last = yBands[yBands.length - 1];
+    if (last) {
+      const lastBottom = Math.max(
+        ...last.map((p) => p.line.bbox.y + p.line.bbox.h),
+      );
+      if (pl.line.bbox.y - lastBottom <= ROW_BAND_SPACING) {
+        last.push(pl);
+        continue;
+      }
+    }
+    yBands.push([pl]);
+  }
+
+  const COLUMN_GAP_THRESHOLD = 30;
+  const COLUMN_SPREAD_MIN = 30;
+  const MIN_COLUMNS = 3;
+  const nonFlowBands: { band: PageLineRef[]; top: number; bottom: number }[] =
+    [];
+  for (const band of yBands) {
+    if (band.length < 2) continue;
+    const xs = band.map((p) => p.line.bbox.x);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    if (maxX - minX < COLUMN_SPREAD_MIN) continue;
+
+    const sortedXs = [
+      ...new Set(xs.map((x) => Math.round(x))),
+    ].sort((a, b) => a - b);
+    let maxGap = 0;
+    for (let i = 1; i < sortedXs.length; i++) {
+      maxGap = Math.max(maxGap, sortedXs[i] - sortedXs[i - 1]);
+    }
+    if (maxGap < COLUMN_GAP_THRESHOLD) continue;
+
+    const colClusters = clusterColumnXs(xs);
+    if (colClusters.length < MIN_COLUMNS) continue;
+
+    nonFlowBands.push({
+      band,
+      top: Math.min(...band.map((p) => p.line.bbox.y)),
+      bottom: Math.max(
+        ...band.map((p) => p.line.bbox.y + p.line.bbox.h),
+      ),
+    });
+  }
+
+  const gaps: number[] = [];
+  for (let i = 1; i < nonFlowBands.length; i++) {
+    const gap =
+      nonFlowBands[i].top - nonFlowBands[i - 1].bottom;
+    if (gap > 0) gaps.push(gap);
+  }
+  gaps.sort((a, b) => a - b);
+  const medianGap =
+    gaps.length > 0 ? gaps[Math.floor(gaps.length / 2)] : 0;
+  const tableBandGap = Math.max(20, medianGap * 1.6);
+
+  const regions: {
+    bands: { band: PageLineRef[]; top: number; bottom: number }[];
+    top: number;
+    bottom: number;
+  }[] = [];
+  let current: typeof nonFlowBands | null = null;
+  for (const nfb of nonFlowBands) {
+    if (current === null) {
+      current = [nfb];
+      continue;
+    }
+    const last = current[current.length - 1];
+    if (nfb.top - last.bottom <= tableBandGap) {
+      current.push(nfb);
+    } else {
+      regions.push({
+        bands: current,
+        top: current[0].top,
+        bottom: current[current.length - 1].bottom,
+      });
+      current = [nfb];
+    }
+  }
+  if (current) {
+    regions.push({
+      bands: current,
+      top: current[0].top,
+      bottom: current[current.length - 1].bottom,
+    });
+  }
+
+  return regions.map((r) => {
+    const all = r.bands.flatMap((b) => b.band);
+    const xs = all.map((p) => p.line.bbox.x);
+    const xRights = all.map((p) => p.line.bbox.x + p.line.bbox.w);
+    const columnXs = clusterColumnXs(xs);
+    const rows: PageLineRef[][] = r.bands.map((b) =>
+      [...b.band].sort((a, c) => a.line.bbox.x - c.line.bbox.x),
+    );
+    return {
+      bbox: {
+        x: Math.min(...xs),
+        y: r.top,
+        w: Math.max(...xRights) - Math.min(...xs),
+        h: r.bottom - r.top,
+      },
+      columnXs,
+      rows,
+    };
+  });
+}
+
+function clusterColumnXs(xs: number[]): number[] {
+  if (xs.length === 0) return [];
+  const CLUSTER_TOL = 25;
+  const sorted = [...new Set(xs.map((x) => Math.round(x)))].sort(
+    (a, b) => a - b,
+  );
+  const clusters: number[][] = [[sorted[0]]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = clusters[clusters.length - 1];
+    if (sorted[i] - last[last.length - 1] <= CLUSTER_TOL) {
+      last.push(sorted[i]);
+    } else {
+      clusters.push([sorted[i]]);
+    }
+  }
+  return clusters.map((c) => c[Math.floor(c.length / 2)]);
 }
 
 function groupLinesIntoRows(blocks: RawBlock[]): ResolvedRow[] {
@@ -836,6 +1019,204 @@ function buildHeaderImageRun(header: CommonHeader): ImageRun {
   });
 }
 
+function assignColumn(lineX: number, columnXs: number[]): number {
+  if (columnXs.length === 0) return 0;
+  let bestIdx = 0;
+  let bestDist = Math.abs(lineX - columnXs[0]);
+  for (let i = 1; i < columnXs.length; i++) {
+    const d = Math.abs(lineX - columnXs[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function buildResolvedTable(
+  region: TableRegion,
+  maxTotalWidth: number | null = null,
+): ResolvedTable {
+  const { columnXs, rows } = region;
+  const numCols = columnXs.length;
+
+  const MIN_COL_WIDTH_PT = 50;
+  const columnWidths: number[] = new Array(numCols);
+  for (let i = 0; i < numCols; i++) {
+    let naturalWidth: number;
+    if (i < numCols - 1) {
+      naturalWidth = columnXs[i + 1] - columnXs[i];
+    } else {
+      const allRightEdges = rows
+        .flat()
+        .filter((p) => assignColumn(p.line.bbox.x, columnXs) === i)
+        .map((p) => p.line.bbox.x + p.line.bbox.w);
+      const rightEdge =
+        allRightEdges.length > 0
+          ? Math.max(...allRightEdges)
+          : columnXs[i] + 40;
+      naturalWidth = rightEdge - columnXs[i];
+    }
+    const colLines = rows
+      .flat()
+      .filter((p) => assignColumn(p.line.bbox.x, columnXs) === i);
+    let textBasedMin = 0;
+    if (colLines.length > 0) {
+      const maxTextLen = Math.max(
+        ...colLines.map((p) => p.line.text.length),
+      );
+      const avgFontSize =
+        colLines.reduce((s, p) => s + p.line.font.size, 0) /
+        colLines.length;
+      textBasedMin = maxTextLen * avgFontSize * 0.55;
+    }
+    columnWidths[i] = Math.max(
+      MIN_COL_WIDTH_PT,
+      naturalWidth,
+      textBasedMin,
+    );
+  }
+
+  if (maxTotalWidth !== null) {
+    const totalWidth = columnWidths.reduce((s, w) => s + w, 0);
+    if (totalWidth > maxTotalWidth) {
+      const scale = maxTotalWidth / totalWidth;
+      for (let i = 0; i < columnWidths.length; i++) {
+        columnWidths[i] *= scale;
+      }
+    }
+  }
+
+  const resolvedRows: ResolvedTableRow[] = rows.map((rowRefs) => {
+    const cells: RawLine[][] = Array.from({ length: numCols }, () => []);
+    for (const ref of rowRefs) {
+      const colIdx = assignColumn(ref.line.bbox.x, columnXs);
+      cells[colIdx].push(ref.line);
+    }
+    const resolvedCells: ResolvedTableCell[] = cells.map((cellLines, ci) => {
+      if (cellLines.length === 0) {
+        return {
+          bbox: { x: columnXs[ci], y: rowRefs[0].line.bbox.y, w: 0, h: 0 },
+          lines: [],
+          alignment: 'left',
+        };
+      }
+      const resolvedLines: ResolvedLine[] = cellLines.map((cl) => ({
+        text: cl.text,
+        fontName: fontNameFromMupdf(cl.font.name, cl.font.family),
+        fontSize: cl.font.size,
+        bold: isBold(cl.font.weight),
+        italic: isItalic(cl.font.style),
+        bbox: cl.bbox,
+        baselineY: cl.y,
+      }));
+      const xs = cellLines.map((cl) => cl.bbox.x);
+      const ys = cellLines.map((cl) => cl.bbox.y);
+      const x2s = cellLines.map((cl) => cl.bbox.x + cl.bbox.w);
+      const y2s = cellLines.map((cl) => cl.bbox.y + cl.bbox.h);
+      const bbox: BBox = {
+        x: Math.min(...xs),
+        y: Math.min(...ys),
+        w: Math.max(...x2s) - Math.min(...xs),
+        h: Math.max(...y2s) - Math.min(...ys),
+      };
+      const colCenter = columnXs[ci] + columnWidths[ci] / 2;
+      const lineCenter = bbox.x + bbox.w / 2;
+      const dist = Math.abs(lineCenter - colCenter);
+      const alignment: 'left' | 'center' | 'right' =
+        dist < columnWidths[ci] * 0.15 ? 'center' : 'left';
+      return { bbox, lines: resolvedLines, alignment };
+    });
+    const xLefts = resolvedCells.map((c) => c.bbox.x);
+    const xRights = resolvedCells.map((c) => c.bbox.x + c.bbox.w);
+    const yTops = resolvedCells.map((c) => c.bbox.y);
+    const yBottoms = resolvedCells.map((c) => c.bbox.y + c.bbox.h);
+    const rowBbox: BBox = {
+      x: Math.min(...xLefts),
+      y: Math.min(...yTops),
+      w: Math.max(...xRights) - Math.min(...xLefts),
+      h: Math.max(...yBottoms) - Math.min(...yTops),
+    };
+    return { bbox: rowBbox, cells: resolvedCells };
+  });
+
+  return {
+    bbox: region.bbox,
+    columnXs,
+    columnWidths,
+    rows: resolvedRows,
+  };
+}
+
+function tableToDocx(table: ResolvedTable): Table {
+  const cellMargins = {
+    marginUnitType: WidthType.DXA,
+    top: 40,
+    bottom: 40,
+    left: 60,
+    right: 60,
+  };
+
+  const docxRows: TableRow[] = table.rows.map((row) => {
+    const docxCells: TableCell[] = row.cells.map((cell, ci) => {
+      if (cell.lines.length === 0) {
+        return new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: '' })] })],
+          width: { size: pointsToTwips(table.columnWidths[ci]), type: WidthType.DXA },
+          margins: cellMargins,
+        });
+      }
+      const lines = [...cell.lines].sort((a, b) => a.bbox.y - b.bbox.y);
+      const cellChildren: (TextRun | { break?: number })[] = [];
+      lines.forEach((line, li) => {
+        if (li > 0) {
+          cellChildren.push(new TextRun({ text: '', break: 1 }));
+        }
+        cellChildren.push(
+          new TextRun({
+            text: line.text,
+            font: line.fontName,
+            size: halfPoints(line.fontSize),
+            bold: line.bold || undefined,
+            italics: line.italic || undefined,
+          }),
+        );
+      });
+      const cellPara = new Paragraph({
+        alignment:
+          cell.alignment === 'center'
+            ? AlignmentType.CENTER
+            : cell.alignment === 'right'
+              ? AlignmentType.RIGHT
+              : AlignmentType.LEFT,
+        children: cellChildren as TextRun[],
+      });
+      return new TableCell({
+        children: [cellPara],
+        width: { size: pointsToTwips(table.columnWidths[ci]), type: WidthType.DXA },
+        margins: cellMargins,
+      });
+    });
+    return new TableRow({ children: docxCells });
+  });
+
+  const totalWidth = table.columnWidths.reduce((s, w) => s + w, 0);
+
+  return new Table({
+    rows: docxRows,
+    width: { size: pointsToTwips(totalWidth), type: WidthType.DXA },
+    columnWidths: table.columnWidths.map((w) => pointsToTwips(w)),
+    borders: {
+      top: { style: 'nil', size: 0 },
+      bottom: { style: 'nil', size: 0 },
+      left: { style: 'nil', size: 0 },
+      right: { style: 'nil', size: 0 },
+      insideHorizontal: { style: 'nil', size: 0 },
+      insideVertical: { style: 'nil', size: 0 },
+    },
+  });
+}
+
 export async function pdfToDocx(
   file: File,
   onProgress?: ConvertProgress,
@@ -904,18 +1285,73 @@ export async function pdfToDocx(
 
   const sections: import('docx').ISectionOptions[] = [];
   for (const pd of pageDataList) {
-    const finalBlocks =
+    const bodyFilteredBlocks =
       pd.bodyStartY > 0
         ? pd.blocks.filter((b) => b.bbox.y >= pd.bodyStartY - 0.5)
         : pd.blocks;
 
-    const rows = groupLinesIntoRows(finalBlocks);
+    const tableRegions = detectTableRegions(bodyFilteredBlocks);
+    const tableLineKeys = new Set<string>();
+    for (const region of tableRegions) {
+      for (const row of region.rows) {
+        for (const ref of row) {
+          tableLineKeys.add(`${ref.blockIdx}:${ref.lineIdx}`);
+        }
+      }
+    }
+
+    const nonTableBlocks: RawBlock[] = [];
+    for (let bi = 0; bi < bodyFilteredBlocks.length; bi++) {
+      const block = bodyFilteredBlocks[bi];
+      const keptLines = block.lines.filter(
+        (_, li) => !tableLineKeys.has(`${bi}:${li}`),
+      );
+      if (keptLines.length === 0) continue;
+      const xs = keptLines.map((l) => l.bbox.x);
+      const ys = keptLines.map((l) => l.bbox.y);
+      const x2s = keptLines.map((l) => l.bbox.x + l.bbox.w);
+      const y2s = keptLines.map((l) => l.bbox.y + l.bbox.h);
+      nonTableBlocks.push({
+        type: 'text',
+        bbox: {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          w: Math.max(...x2s) - Math.min(...xs),
+          h: Math.max(...y2s) - Math.min(...ys),
+        },
+        lines: keptLines,
+      });
+    }
+
+    const rows = groupLinesIntoRows(nonTableBlocks);
     const paragraphs = groupRowsIntoParagraphs(
       rows,
       pd.bodyXLeft,
       pd.bodyXRight,
     );
-    const docxChildren: Paragraph[] = paragraphs.map(paragraphToDocx);
+
+    type PageItem =
+      | { kind: 'paragraph'; y: number; item: Paragraph }
+      | { kind: 'table'; y: number; item: Table };
+    const pageItems: PageItem[] = [];
+    for (const para of paragraphs) {
+      pageItems.push({
+        kind: 'paragraph',
+        y: para.bbox.y,
+        item: paragraphToDocx(para),
+      });
+    }
+    for (const t of tableRegions) {
+      const bodyWidth = Math.max(20, pd.bodyXRight - pd.bodyXLeft);
+      pageItems.push({
+        kind: 'table',
+        y: t.bbox.y,
+        item: tableToDocx(buildResolvedTable(t, bodyWidth)),
+      });
+    }
+    pageItems.sort((a, b) => a.y - b.y);
+
+    const docxChildren: (Paragraph | Table)[] = pageItems.map((it) => it.item);
 
     const marginLeft = pointsToTwips(pd.bodyXLeft);
     const marginRight = pointsToTwips(

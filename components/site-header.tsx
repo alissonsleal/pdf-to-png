@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-type NavKey = 'convert' | 'merge' | 'compress' | 'word';
+type NavKey = 'convert' | 'merge' | 'compress' | 'word' | 'organize';
 
 type Props = {
   current?: NavKey;
@@ -9,6 +9,7 @@ type Props = {
 const navLinks: { key: NavKey; href: string; label: string }[] = [
   { key: 'convert', href: '/', label: 'Convert' },
   { key: 'merge', href: '/merge', label: 'Merge' },
+  { key: 'organize', href: '/organize', label: 'Organize' },
   { key: 'compress', href: '/compress', label: 'Compress' },
   { key: 'word', href: '/word', label: 'Word' },
 ];

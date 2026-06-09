@@ -7,6 +7,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
+import { GlobalDropzone } from './global-dropzone';
 import { WordDropzone } from './word-dropzone';
 import { WordResult } from './word-result';
 import { formatBytes } from '../lib/format-bytes';
@@ -159,8 +160,16 @@ export function PdfToWord() {
     );
   }
 
-  if (result && status === 'done') {
-    return (
+  const isConverting = status === 'converting';
+  const canConvert = !isConverting && pageCount !== null && readError === null;
+
+  return (
+    <GlobalDropzone
+      show={!!file}
+      onDrop={(files) => addFile(files)}
+      label="Drop a PDF to convert"
+    >
+    {result && status === 'done' ? (
       <WordResult
         blob={result.blob}
         fileName={result.fileName}
@@ -168,13 +177,7 @@ export function PdfToWord() {
         originalSize={result.originalSize}
         onStartOver={startOver}
       />
-    );
-  }
-
-  const isConverting = status === 'converting';
-  const canConvert = !isConverting && pageCount !== null && readError === null;
-
-  return (
+    ) : (
     <div>
       <input
         ref={inputRef}
@@ -268,5 +271,7 @@ export function PdfToWord() {
         </button>
       </div>
     </div>
+    )}
+    </GlobalDropzone>
   );
 }

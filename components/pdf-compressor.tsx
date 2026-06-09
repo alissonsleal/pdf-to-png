@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { CompressDropzone } from './compress-dropzone';
 import { CompressResult } from './compress-result';
+import { GlobalDropzone } from './global-dropzone';
 import { QualitySelector } from './quality-selector';
 import { formatBytes } from '../lib/format-bytes';
 import {
@@ -155,8 +156,16 @@ export function PdfCompressor() {
     );
   }
 
-  if (result && status === 'done') {
-    return (
+  const isCompressing = status === 'compressing';
+  const canCompress = !isCompressing && pageCount !== null && readError === null;
+
+  return (
+    <GlobalDropzone
+      show={!!file}
+      onDrop={(files) => addFile(files)}
+      label="Drop a PDF to compress"
+    >
+    {result && status === 'done' ? (
       <CompressResult
         blob={result.blob}
         fileName={result.fileName}
@@ -166,13 +175,7 @@ export function PdfCompressor() {
         method={result.method as CompressMethod}
         onStartOver={startOver}
       />
-    );
-  }
-
-  const isCompressing = status === 'compressing';
-  const canCompress = !isCompressing && pageCount !== null && readError === null;
-
-  return (
+    ) : (
     <div>
       <input
         ref={inputRef}
@@ -330,5 +333,7 @@ export function PdfCompressor() {
         </button>
       </div>
     </div>
+    )}
+    </GlobalDropzone>
   );
 }

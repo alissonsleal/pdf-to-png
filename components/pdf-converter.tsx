@@ -4,6 +4,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import JSZip from 'jszip';
 import { ActionBar } from './action-bar';
 import { Dropzone } from './dropzone';
+import { GlobalDropzone } from './global-dropzone';
 import { ImageCard } from './image-card';
 import { Lightbox } from './lightbox';
 import { ResultsGrid } from './results-grid';
@@ -92,6 +93,13 @@ export function PdfConverter() {
   }
 
   return (
+    <GlobalDropzone
+      show={!!source.file}
+      onDrop={(files) => {
+        const f = files[0];
+        if (f) source.setSource(f);
+      }}
+    >
     <div>
       <ActionBar
         fileName={source.file.name}
@@ -141,5 +149,6 @@ export function PdfConverter() {
         />
       )}
     </div>
+    </GlobalDropzone>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { GlobalDropzone } from './global-dropzone';
 import { MergeDropzone } from './merge-dropzone';
 import { MergeList } from './merge-list';
 import { MergeResult } from './merge-result';
@@ -154,8 +155,7 @@ export function PdfMerger() {
     setItems((prev) => {
       const next = [...prev];
       const [moved] = next.splice(from, 1);
-      const target = to > from ? to - 1 : to;
-      next.splice(target, 0, moved);
+      next.splice(to, 0, moved);
       return next;
     });
   }, []);
@@ -226,6 +226,14 @@ export function PdfMerger() {
     status === 'idle' && validCount >= 2 && totalPages > 0;
 
   return (
+    <GlobalDropzone
+      show={items.length > 0}
+      onDrop={(files) => {
+        if (status === 'done') startOver();
+        void addFiles(files);
+      }}
+      label="Drop PDFs to merge"
+    >
     <div>
       <input
         ref={addMoreInputRef}
@@ -323,5 +331,6 @@ export function PdfMerger() {
         </>
       )}
     </div>
+    </GlobalDropzone>
   );
 }

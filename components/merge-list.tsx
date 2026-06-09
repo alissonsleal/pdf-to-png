@@ -1,7 +1,25 @@
 'use client';
 
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
 import { MergeListItem } from './merge-list-item';
+import { MergeDragPreview } from './merge-drag-preview';
 import type { MergeItem } from './pdf-merger';
 
 type Props = {
@@ -12,81 +30,73 @@ type Props = {
 };
 
 export function MergeList({ items, onReorder, onRemove, disabled }: Props) {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const clearDrag = () => {
-    setDraggingId(null);
-    setOverIndex(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const itemIds = useMemo(() => items.map((it) => it.id), [items]);
+
+  const activeItem = useMemo(
+    () => (activeId ? items.find((it) => it.id === activeId) ?? null : null),
+    [activeId, items],
+  );
+
+  const activeIndex = useMemo(
+    () => (activeItem ? items.indexOf(activeItem) : -1),
+    [activeItem, items],
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
   };
 
-  const handleDragStart =
-    (id: string) => (e: DragEvent<HTMLButtonElement>) => {
-      if (disabled) return;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', id);
-      setDraggingId(id);
-    };
-
-  const handleDragOver =
-    (index: number) => (e: DragEvent<HTMLLIElement>) => {
-      if (disabled) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (overIndex !== index) setOverIndex(index);
-    };
-
-  const handleDrop = (index: number) => (e: DragEvent<HTMLLIElement>) => {
-    if (disabled) return;
-    e.preventDefault();
-    if (draggingId) {
-      const fromIndex = items.findIndex((it) => it.id === draggingId);
-      if (fromIndex !== -1 && fromIndex !== index) {
-        onReorder(fromIndex, index);
-      }
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    const fromIndex = itemIds.indexOf(String(active.id));
+    const toIndex = itemIds.indexOf(String(over.id));
+    if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+      onReorder(fromIndex, toIndex);
     }
-    clearDrag();
   };
 
-  const handleDragEnd = () => {
-    clearDrag();
+  const handleDragCancel = (_event: DragCancelEvent) => {
+    setActiveId(null);
   };
-
-  const handleKeyDown =
-    (index: number) => (e: KeyboardEvent<HTMLLIElement>) => {
-      if (disabled) return;
-      if (e.key === 'ArrowUp' && index > 0) {
-        e.preventDefault();
-        onReorder(index, index - 1);
-      } else if (e.key === 'ArrowDown' && index < items.length - 1) {
-        e.preventDefault();
-        onReorder(index, index + 1);
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-          onRemove(items[index].id);
-        }
-      }
-    };
 
   return (
-    <ol className="space-y-2" aria-label="PDFs to merge, in order">
-      {items.map((item, i) => (
-        <MergeListItem
-          key={item.id}
-          item={item}
-          index={i}
-          isDragging={draggingId === item.id}
-          isOver={overIndex === i && draggingId !== null && draggingId !== item.id}
-          disabled={disabled}
-          onDragStart={handleDragStart(item.id)}
-          onDragOver={handleDragOver(i)}
-          onDrop={handleDrop(i)}
-          onDragEnd={handleDragEnd}
-          onKeyDown={handleKeyDown(i)}
-          onRemove={() => onRemove(item.id)}
-        />
-      ))}
-    </ol>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        <ol className="space-y-2" aria-label="PDFs to merge, in order">
+          {items.map((item, i) => (
+            <MergeListItem
+              key={item.id}
+              item={item}
+              index={i}
+              disabled={disabled}
+              onRemove={() => onRemove(item.id)}
+            />
+          ))}
+        </ol>
+      </SortableContext>
+
+      <DragOverlay dropAnimation={null}>
+        {activeItem ? (
+          <MergeDragPreview item={activeItem} index={activeIndex} />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

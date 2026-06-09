@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
+import { GlobalDropzone } from './global-dropzone';
 import { OrganizeDropzone } from './organize-dropzone';
 import { OrganizePageGrid } from './organize-page-grid';
 import { OrganizeResult } from './organize-result';
@@ -442,6 +443,11 @@ export function PdfOrganizer() {
   const pageCount = pages.length;
 
   return (
+    <GlobalDropzone
+      show={sources.length > 0}
+      onDrop={(files) => void addFiles(files)}
+      label="Drop PDFs to organize"
+    >
     <div>
       <input
         ref={addMoreInputRef}
@@ -601,6 +607,7 @@ export function PdfOrganizer() {
         </>
       )}
     </div>
+    </GlobalDropzone>
   );
 }
 

@@ -1,53 +1,63 @@
-import type { DragEvent, KeyboardEvent } from 'react';
+'use client';
+
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { formatBytes } from '../lib/format-bytes';
 import type { MergeItem } from './pdf-merger';
+import type { CSSProperties, KeyboardEvent } from 'react';
 
 type Props = {
   item: MergeItem;
   index: number;
-  isDragging: boolean;
-  isOver: boolean;
   disabled: boolean;
-  onDragStart: (e: DragEvent<HTMLButtonElement>) => void;
-  onDragOver: (e: DragEvent<HTMLLIElement>) => void;
-  onDrop: (e: DragEvent<HTMLLIElement>) => void;
-  onDragEnd: () => void;
-  onKeyDown: (e: KeyboardEvent<HTMLLIElement>) => void;
   onRemove: () => void;
 };
 
-export function MergeListItem({
-  item,
-  index,
-  isDragging,
-  isOver,
-  disabled,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  onKeyDown,
-  onRemove,
-}: Props) {
+export function MergeListItem({ item, index, disabled, onRemove }: Props) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: item.id,
+    disabled,
+  });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging || !transform ? 'none' : transition,
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLLIElement>) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        onRemove();
+      }
+    }
+  };
+
   return (
     <li
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onKeyDown={onKeyDown}
+      ref={setNodeRef}
+      style={style}
+      onKeyDown={handleKeyDown}
       tabIndex={disabled ? -1 : 0}
       aria-label={`${item.name}, position ${index + 1} of its group. Use the move handle to drag, or press arrow keys to reorder.`}
       className={`rounded-xl border bg-white p-3 transition-all dark:bg-black/40 ${
-        isOver
-          ? 'border-[#f44] ring-2 ring-[#f44]/40'
+        isDragging
+          ? 'opacity-0'
           : 'border-black/10 dark:border-white/10'
-      } ${isDragging ? 'cursor-grabbing opacity-40' : ''}`}
+      }`}
     >
       <div className="flex items-center gap-3">
         <button
           type="button"
-          draggable={!disabled}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
+          {...attributes}
+          {...listeners}
           disabled={disabled}
           aria-label={`Move ${item.name}`}
           className="flex h-9 w-9 flex-none cursor-grab items-center justify-center rounded-md text-black/40 transition-colors hover:bg-black/[0.05] hover:text-black/70 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30 dark:text-white/40 dark:hover:bg-white/[0.06] dark:hover:text-white/70"

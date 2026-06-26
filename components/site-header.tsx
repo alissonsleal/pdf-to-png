@@ -7,8 +7,8 @@ type Props = {
 };
 
 const navLinks: { key: NavKey; href: string; label: string }[] = [
-  { key: 'convert', href: '/', label: 'Convert' },
   { key: 'merge', href: '/merge', label: 'Merge' },
+  { key: 'convert', href: '/', label: 'Convert' },
   { key: 'organize', href: '/organize', label: 'Organize' },
   { key: 'compress', href: '/compress', label: 'Compress' },
   { key: 'word', href: '/word', label: 'Word' },

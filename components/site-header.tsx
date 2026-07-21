@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-type NavKey = 'convert' | 'merge' | 'compress' | 'word' | 'organize';
+type NavKey = 'convert' | 'merge' | 'compress' | 'word' | 'organize' | 'image-to-pdf';
 
 type Props = {
   current?: NavKey;
@@ -12,6 +12,7 @@ const navLinks: { key: NavKey; href: string; label: string }[] = [
   { key: 'organize', href: '/organize', label: 'Organize' },
   { key: 'compress', href: '/compress', label: 'Compress' },
   { key: 'word', href: '/word', label: 'Word' },
+  { key: 'image-to-pdf', href: '/image-to-pdf', label: 'Image to PDF' },
 ];
 
 export function SiteHeader({ current = 'convert' }: Props) {
